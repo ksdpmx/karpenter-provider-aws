@@ -170,6 +170,7 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *corev1be
 	}
 	// TODO, break this coupling
 	instanceTypes, err := c.instanceTypeProvider.List(ctx, nodePool.Spec.Template.Spec.Kubelet, nodeClass)
+	// log.FromContext(ctx).Info("cloudprovider", "GetInstanceTypes", instanceTypes)
 	if err != nil {
 		return nil, err
 	}
