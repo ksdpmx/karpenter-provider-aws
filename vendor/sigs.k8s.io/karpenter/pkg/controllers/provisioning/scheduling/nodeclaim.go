@@ -156,7 +156,8 @@ func (n *NodeClaim) CanAdd(
 	requests := resources.Merge(n.Spec.Resources.Requests, podData.Requests)
 
 	remaining, err := filterInstanceTypesByRequirements(
-		n.InstanceTypeOptions, nodeClaimRequirements, podData.Requests, n.daemonResources, requests,
+		n.InstanceTypeOptions, nodeClaimRequirements, podData.Requests, n.daemonResources,
+		resources.IgnoreHugePages(requests),
 	)
 	if err != nil {
 		// We avoid wrapping this err because calling String() on InstanceTypeFilterError is an expensive operation

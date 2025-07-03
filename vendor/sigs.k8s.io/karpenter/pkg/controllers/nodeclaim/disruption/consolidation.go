@@ -18,7 +18,6 @@ package disruption
 
 import (
 	"context"
-
 	"github.com/samber/lo"
 	"k8s.io/utils/clock"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -35,7 +34,9 @@ type Consolidation struct {
 }
 
 //nolint:gocyclo
-func (c *Consolidation) Reconcile(ctx context.Context, nodePool *v1.NodePool, nodeClaim *v1.NodeClaim) (reconcile.Result, error) {
+func (c *Consolidation) Reconcile(
+	ctx context.Context, nodePool *v1.NodePool, nodeClaim *v1.NodeClaim,
+) (reconcile.Result, error) {
 	hasConsolidatableCondition := nodeClaim.StatusConditions().Get(v1.ConditionTypeConsolidatable) != nil
 
 	// 1. If Consolidation isn't enabled, remove the consolidatable status condition
@@ -57,7 +58,10 @@ func (c *Consolidation) Reconcile(ctx context.Context, nodePool *v1.NodePool, no
 	}
 
 	// If the lastPodEvent is zero, use the time that the nodeclaim was initialized, as that's when Karpenter recognizes that pods could have started scheduling
-	timeToCheck := lo.Ternary(!nodeClaim.Status.LastPodEventTime.IsZero(), nodeClaim.Status.LastPodEventTime.Time, initialized.LastTransitionTime.Time)
+	timeToCheck := lo.Ternary(
+		!nodeClaim.Status.LastPodEventTime.IsZero(), nodeClaim.Status.LastPodEventTime.Time,
+		initialized.LastTransitionTime.Time,
+	)
 
 	// Consider a node consolidatable by looking at the lastPodEvent status field on the nodeclaim.
 	if c.clock.Since(timeToCheck) < lo.FromPtr(nodePool.Spec.Disruption.ConsolidateAfter.Duration) {

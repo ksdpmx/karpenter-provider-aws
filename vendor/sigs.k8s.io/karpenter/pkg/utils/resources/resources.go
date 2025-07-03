@@ -130,7 +130,9 @@ func podRequests(pod *v1.Pod) v1.ResourceList {
 
 		} else {
 			// Else, check whether the current container's resource requests combined with the restartableInitContainer requests are greater than the current max
-			maxInitContainerReqs = MaxResources(maxInitContainerReqs, Merge(containerReqs, restartableInitContainerReqs))
+			maxInitContainerReqs = MaxResources(
+				maxInitContainerReqs, Merge(containerReqs, restartableInitContainerReqs),
+			)
 		}
 	}
 	// The container's needed requests are the max of all of the container requests combined with native sidecar container requests OR the requests required for a large init containers with native sidecar container requests to run
@@ -163,7 +165,9 @@ func podLimits(pod *v1.Pod) v1.ResourceList {
 			maxInitContainerLimits = MaxResources(maxInitContainerLimits, restartableInitContainerLimits)
 		} else {
 			// Else, check whether the current container's resource limits combined with the restartableInitContainer limits are greater than the current max
-			maxInitContainerLimits = MaxResources(maxInitContainerLimits, Merge(container.Resources.Limits, restartableInitContainerLimits))
+			maxInitContainerLimits = MaxResources(
+				maxInitContainerLimits, Merge(container.Resources.Limits, restartableInitContainerLimits),
+			)
 		}
 	}
 	// The container's needed limits are the max of all of the container limits combined with native sidecar container limits OR the limits required for a large init containers with native sidecar container limits to run
@@ -250,4 +254,11 @@ func String(list v1.ResourceList) string {
 		return "{}"
 	}
 	return pretty.Concise(list)
+}
+
+func IgnoreHugePages(requests v1.ResourceList) v1.ResourceList {
+	for _, hp := range []string{"64Ki", "2Mi", "32Mi", "1Gi"} {
+		delete(requests, v1.ResourceName(v1.ResourceHugePagesPrefix+hp))
+	}
+	return requests
 }

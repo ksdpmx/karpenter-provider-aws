@@ -19,14 +19,13 @@ package disruption
 import (
 	"context"
 	"fmt"
-	"strings"
-
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/utils/clock"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"strings"
 
 	"sigs.k8s.io/karpenter/pkg/operator/options"
 
@@ -48,22 +47,27 @@ import (
 var errCandidateDeleting = fmt.Errorf("candidate is deleting")
 
 //nolint:gocyclo
-func SimulateScheduling(ctx context.Context, kubeClient client.Client, cluster *state.Cluster, provisioner *provisioning.Provisioner,
+func SimulateScheduling(
+	ctx context.Context, kubeClient client.Client, cluster *state.Cluster, provisioner *provisioning.Provisioner,
 	candidates ...*Candidate,
 ) (scheduling.Results, error) {
 	candidateNames := sets.NewString(lo.Map(candidates, func(t *Candidate, i int) string { return t.Name() })...)
 	nodes := cluster.Nodes()
 	deletingNodes := nodes.Deleting()
-	stateNodes := lo.Filter(nodes.Active(), func(n *state.StateNode, _ int) bool {
-		return !candidateNames.Has(n.Name())
-	})
+	stateNodes := lo.Filter(
+		nodes.Active(), func(n *state.StateNode, _ int) bool {
+			return !candidateNames.Has(n.Name())
+		},
+	)
 
 	// We do one final check to ensure that the node that we are attempting to consolidate isn't
 	// already handled for deletion by some other controller. This could happen if the node was markedForDeletion
 	// between returning the candidates and getting the stateNodes above
-	if _, ok := lo.Find(deletingNodes, func(n *state.StateNode) bool {
-		return candidateNames.Has(n.Name())
-	}); ok {
+	if _, ok := lo.Find(
+		deletingNodes, func(n *state.StateNode) bool {
+			return candidateNames.Has(n.Name())
+		},
+	); ok {
 		return scheduling.Results{}, errCandidateDeleting
 	}
 
@@ -81,9 +85,11 @@ func SimulateScheduling(ctx context.Context, kubeClient client.Client, cluster *
 		return scheduling.Results{}, fmt.Errorf("tracking PodDisruptionBudgets, %w", err)
 	}
 	for _, n := range candidates {
-		currentlyReschedulablePods := lo.Filter(n.reschedulablePods, func(p *corev1.Pod, _ int) bool {
-			return pdbs.IsCurrentlyReschedulable(p)
-		})
+		currentlyReschedulablePods := lo.Filter(
+			n.reschedulablePods, func(p *corev1.Pod, _ int) bool {
+				return pdbs.IsCurrentlyReschedulable(p)
+			},
+		)
 		pods = append(pods, currentlyReschedulablePods...)
 	}
 
@@ -108,9 +114,11 @@ func SimulateScheduling(ctx context.Context, kubeClient client.Client, cluster *
 		return scheduling.Results{}, fmt.Errorf("creating scheduler, %w", err)
 	}
 
-	deletingNodePodKeys := lo.SliceToMap(deletingNodePods, func(p *corev1.Pod) (client.ObjectKey, interface{}) {
-		return client.ObjectKeyFromObject(p), nil
-	})
+	deletingNodePodKeys := lo.SliceToMap(
+		deletingNodePods, func(p *corev1.Pod) (client.ObjectKey, interface{}) {
+			return client.ObjectKeyFromObject(p), nil
+		},
+	)
 
 	results, err := scheduler.Solve(log.IntoContext(ctx, operatorlogging.NopLogger), pods)
 	if err != nil {
@@ -169,8 +177,10 @@ func instanceTypesAreSubset(lhs []*cloudprovider.InstanceType, rhs []*cloudprovi
 }
 
 // GetCandidates returns nodes that appear to be currently deprovisionable based off of their nodePool
-func GetCandidates(ctx context.Context, cluster *state.Cluster, kubeClient client.Client, recorder events.Recorder, clk clock.Clock,
-	cloudProvider cloudprovider.CloudProvider, shouldDisrupt CandidateFilter, disruptionClass string, queue *orchestration.Queue,
+func GetCandidates(
+	ctx context.Context, cluster *state.Cluster, kubeClient client.Client, recorder events.Recorder, clk clock.Clock,
+	cloudProvider cloudprovider.CloudProvider, shouldDisrupt CandidateFilter, disruptionClass string,
+	queue *orchestration.Queue,
 ) ([]*Candidate, error) {
 	nodePoolMap, nodePoolToInstanceTypesMap, err := BuildNodePoolMap(ctx, kubeClient, cloudProvider)
 	if err != nil {
@@ -180,16 +190,23 @@ func GetCandidates(ctx context.Context, cluster *state.Cluster, kubeClient clien
 	if err != nil {
 		return nil, fmt.Errorf("tracking PodDisruptionBudgets, %w", err)
 	}
-	candidates := lo.FilterMap(cluster.Nodes(), func(n *state.StateNode, _ int) (*Candidate, bool) {
-		cn, e := NewCandidate(ctx, kubeClient, recorder, clk, n, pdbs, nodePoolMap, nodePoolToInstanceTypesMap, queue, disruptionClass)
-		return cn, e == nil
-	})
+	candidates := lo.FilterMap(
+		cluster.Nodes(), func(n *state.StateNode, _ int) (*Candidate, bool) {
+			cn, e := NewCandidate(
+				ctx, kubeClient, recorder, clk, n, pdbs, nodePoolMap, nodePoolToInstanceTypesMap, queue,
+				disruptionClass,
+			)
+			return cn, e == nil
+		},
+	)
 	// Filter only the valid candidates that we should disrupt
 	return lo.Filter(candidates, func(c *Candidate, _ int) bool { return shouldDisrupt(ctx, c) }), nil
 }
 
 // BuildNodePoolMap builds a provName -> nodePool map and a provName -> instanceName -> instance type map
-func BuildNodePoolMap(ctx context.Context, kubeClient client.Client, cloudProvider cloudprovider.CloudProvider) (map[string]*v1.NodePool, map[string]map[string]*cloudprovider.InstanceType, error) {
+func BuildNodePoolMap(
+	ctx context.Context, kubeClient client.Client, cloudProvider cloudprovider.CloudProvider,
+) (map[string]*v1.NodePool, map[string]map[string]*cloudprovider.InstanceType, error) {
 	nodePoolMap := map[string]*v1.NodePool{}
 	nodePools, err := nodepoolutils.ListManaged(ctx, kubeClient, cloudProvider)
 	if err != nil {
@@ -222,7 +239,10 @@ func BuildNodePoolMap(ctx context.Context, kubeClient client.Client, cloudProvid
 // We calculate allowed disruptions by taking the max disruptions allowed by disruption reason and subtracting the number of nodes that are NotReady and already being deleted by that disruption reason.
 //
 //nolint:gocyclo
-func BuildDisruptionBudgetMapping(ctx context.Context, cluster *state.Cluster, clk clock.Clock, kubeClient client.Client, cloudProvider cloudprovider.CloudProvider, recorder events.Recorder, reason v1.DisruptionReason) (map[string]int, error) {
+func BuildDisruptionBudgetMapping(
+	ctx context.Context, cluster *state.Cluster, clk clock.Clock, kubeClient client.Client,
+	cloudProvider cloudprovider.CloudProvider, recorder events.Recorder, reason v1.DisruptionReason,
+) (map[string]int, error) {
 	disruptionBudgetMapping := map[string]int{}
 	numNodes := map[string]int{}   // map[nodepool] -> node count in nodepool
 	disrupting := map[string]int{} // map[nodepool] -> nodes undergoing disruption
@@ -251,7 +271,9 @@ func BuildDisruptionBudgetMapping(ctx context.Context, cluster *state.Cluster, c
 		// If the node satisfies one of the following, we subtract it from the allowed disruptions.
 		// 1. Has a NotReady conditiion
 		// 2. Is marked as disrupting
-		if cond := nodeutils.GetCondition(node.Node, corev1.NodeReady); cond.Status != corev1.ConditionTrue || node.MarkedForDeletion() {
+		if cond := nodeutils.GetCondition(
+			node.Node, corev1.NodeReady,
+		); cond.Status != corev1.ConditionTrue || node.MarkedForDeletion() {
 			disrupting[nodePool]++
 		}
 	}
@@ -262,9 +284,11 @@ func BuildDisruptionBudgetMapping(ctx context.Context, cluster *state.Cluster, c
 	for _, nodePool := range nodePools {
 		allowedDisruptions := nodePool.MustGetAllowedDisruptions(clk, numNodes[nodePool.Name], reason)
 		disruptionBudgetMapping[nodePool.Name] = lo.Max([]int{allowedDisruptions - disrupting[nodePool.Name], 0})
-		NodePoolAllowedDisruptions.Set(float64(allowedDisruptions), map[string]string{
-			metrics.NodePoolLabel: nodePool.Name, metrics.ReasonLabel: string(reason),
-		})
+		NodePoolAllowedDisruptions.Set(
+			float64(allowedDisruptions), map[string]string{
+				metrics.NodePoolLabel: nodePool.Name, metrics.ReasonLabel: string(reason),
+			},
+		)
 		if numNodes[nodePool.Name] != 0 && allowedDisruptions == 0 {
 			recorder.Publish(disruptionevents.NodePoolBlockedForDisruptionReason(nodePool, reason))
 		}
@@ -275,7 +299,9 @@ func BuildDisruptionBudgetMapping(ctx context.Context, cluster *state.Cluster, c
 // mapCandidates maps the list of proposed candidates with the current state
 func mapCandidates(proposed, current []*Candidate) []*Candidate {
 	proposedNames := sets.NewString(lo.Map(proposed, func(c *Candidate, i int) string { return c.Name() })...)
-	return lo.Filter(current, func(c *Candidate, _ int) bool {
-		return proposedNames.Has(c.Name())
-	})
+	return lo.Filter(
+		current, func(c *Candidate, _ int) bool {
+			return proposedNames.Has(c.Name())
+		},
+	)
 }
