@@ -156,7 +156,7 @@ func (n *NodeClaim) CanAdd(
 	requests := resources.Merge(n.Spec.Resources.Requests, podData.Requests)
 
 	remaining, err := filterInstanceTypesByRequirements(
-		n.InstanceTypeOptions, nodeClaimRequirements, podData.Requests, n.daemonResources, requests,
+		n.InstanceTypeOptions, nodeClaimRequirements, podData.Requests, n.daemonResources, ignoreHugePages(requests),
 	)
 	if err != nil {
 		// We avoid wrapping this err because calling String() on InstanceTypeFilterError is an expensive operation
@@ -501,4 +501,11 @@ func compatible(instanceType *cloudprovider.InstanceType, requirements schedulin
 
 func fits(instanceType *cloudprovider.InstanceType, requests corev1.ResourceList) bool {
 	return resources.Fits(requests, instanceType.Allocatable())
+}
+
+func ignoreHugePages(requests corev1.ResourceList) corev1.ResourceList {
+	for _, hp := range []string{"64Ki", "2Mi", "32Mi", "1Gi"} {
+		delete(requests, corev1.ResourceName(corev1.ResourceHugePagesPrefix+hp))
+	}
+	return requests
 }
