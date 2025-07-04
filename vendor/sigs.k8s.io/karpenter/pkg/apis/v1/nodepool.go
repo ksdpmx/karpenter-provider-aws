@@ -147,7 +147,10 @@ func (l Limits) ExceededBy(resources v1.ResourceList) error {
 	for resourceName, usage := range resources {
 		if limit, ok := l[resourceName]; ok {
 			if usage.Cmp(limit) > 0 {
-				return serrors.Wrap(fmt.Errorf("resource usage exceeds limit"), "resource-name", resourceName, "usage", usage.AsDec(), "limit", limit.AsDec())
+				return serrors.Wrap(
+					fmt.Errorf("resource usage exceeds limit"), "resource-name", resourceName, "usage", usage.AsDec(),
+					"limit", limit.AsDec(),
+				)
 			}
 		}
 	}
@@ -276,11 +279,17 @@ type NodePool struct {
 const NodePoolHashVersion = "v3"
 
 func (in *NodePool) Hash() string {
-	return fmt.Sprint(lo.Must(hashstructure.Hash(in.Spec.Template, hashstructure.FormatV2, &hashstructure.HashOptions{
-		SlicesAsSets:    true,
-		IgnoreZeroValue: true,
-		ZeroNil:         true,
-	})))
+	return fmt.Sprint(
+		lo.Must(
+			hashstructure.Hash(
+				in.Spec.Template, hashstructure.FormatV2, &hashstructure.HashOptions{
+					SlicesAsSets:    true,
+					IgnoreZeroValue: true,
+					ZeroNil:         true,
+				},
+			),
+		),
+	)
 }
 
 // NodePoolList contains a list of NodePool
@@ -308,13 +317,22 @@ func (in *NodePool) GetAllowedDisruptionsByReason(c clock.Clock, numNodes int, r
 	var multiErr error
 	for _, budget := range in.Spec.Disruption.Budgets {
 		val, err := budget.GetAllowedDisruptions(c, numNodes)
+		fmt.Printf("DEBUG nodepool %s, budget %s, reason %s, val %d\n", in.Name, budget.Nodes, reason, val)
 		if err != nil {
 			multiErr = multierr.Append(multiErr, err)
 		}
 		if budget.Reasons == nil || lo.Contains(budget.Reasons, reason) {
 			allowedNodes = lo.Min([]int{allowedNodes, val})
+			fmt.Printf(
+				"DEBUG nodepool %s, budget %s, reason %s, val %d, allowedNodes %d\n", in.Name, budget.Nodes, reason,
+				val,
+				allowedNodes,
+			)
 		}
 	}
+	fmt.Printf(
+		"DEBUG nodepool %s, reason %s, allowedNodes %d, multiErr: %#v\n", in.Name, reason, allowedNodes, multiErr,
+	)
 	return allowedNodes, multiErr
 }
 

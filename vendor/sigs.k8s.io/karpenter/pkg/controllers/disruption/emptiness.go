@@ -41,8 +41,13 @@ func NewEmptiness(c consolidation) *Emptiness {
 // ShouldDisrupt is a predicate used to filter candidates
 func (e *Emptiness) ShouldDisrupt(_ context.Context, c *Candidate) bool {
 	// If consolidation is disabled, don't do anything. This emptiness should run for both WhenEmpty and WhenEmptyOrUnderutilized
+	fmt.Printf("DEBUG controllers/disruption duration: %v\n", c.NodePool.Spec.Disruption.ConsolidateAfter.Duration)
 	if c.NodePool.Spec.Disruption.ConsolidateAfter.Duration == nil {
-		e.recorder.Publish(disruptionevents.Unconsolidatable(c.Node, c.NodeClaim, fmt.Sprintf("NodePool %q has consolidation disabled", c.NodePool.Name))...)
+		e.recorder.Publish(
+			disruptionevents.Unconsolidatable(
+				c.Node, c.NodeClaim, fmt.Sprintf("NodePool %q has consolidation disabled", c.NodePool.Name),
+			)...,
+		)
 		return false
 	}
 	// return true if there are no pods and the nodeclaim is consolidatable
@@ -52,7 +57,9 @@ func (e *Emptiness) ShouldDisrupt(_ context.Context, c *Candidate) bool {
 // ComputeCommand generates a disruption command given candidates
 //
 //nolint:gocyclo
-func (e *Emptiness) ComputeCommand(ctx context.Context, disruptionBudgetMapping map[string]int, candidates ...*Candidate) (Command, scheduling.Results, error) {
+func (e *Emptiness) ComputeCommand(
+	ctx context.Context, disruptionBudgetMapping map[string]int, candidates ...*Candidate,
+) (Command, scheduling.Results, error) {
 	if e.IsConsolidated() {
 		return Command{}, scheduling.Results{}, nil
 	}
